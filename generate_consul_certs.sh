@@ -27,17 +27,13 @@ consul tls cert create -client -dc "$DC" \
 # Move CA outputs manually
 mv *.pem "$CERT_DIR/" 2>/dev/null || true
 
-# Move and rename server certs
+# Move server certs
 SERVER_CERT=$(find . -maxdepth 1 -name "*-server-consul-*.pem" | grep -v key.pem | head -n1)
 SERVER_KEY=$(find . -maxdepth 1 -name "*-server-consul-*-key.pem" | head -n1)
-mv "$SERVER_CERT" "$CERT_DIR/consul-agent-cert.pem"
-mv "$SERVER_KEY" "$CERT_DIR/consul-agent-key.pem"
 
-# Move and rename client certs
+# Move client certs
 CLIENT_CERT=$(find . -maxdepth 1 -name "*-client-consul-*.pem" | grep -v key.pem | head -n1)
 CLIENT_KEY=$(find . -maxdepth 1 -name "*-client-consul-*-key.pem" | head -n1)
-mv "$CLIENT_CERT" "$CERT_DIR/client-cert.pem"
-mv "$CLIENT_KEY" "$CERT_DIR/client-key.pem"
 
 echo "🎉 Done. Contents of $CERT_DIR:"
 ls -1 "$CERT_DIR"
