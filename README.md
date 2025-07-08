@@ -1,6 +1,6 @@
 # Consul Service Discovery Example
 
-This project demonstrates service discovery using [Consul](https://www.consul.io/) with two Python Flask microservices: **Service A** and **Service B**. Both services register themselves with Consul using mTLS, and Service A discovers and calls Service B via Consul.
+This project demonstrates service discovery using [Consul](https://www.consul.io/) with two Python Flask microservices: **Service A** and **Service B**. Both services register themselves with Consul using mTLS and communicate with each other through Consul Connect sidecar proxies.
 
 ---
 
@@ -22,7 +22,7 @@ service_b.py            # Service B Flask app
 
 ---
 
-## Setup and Running with mTLS (Default)
+## Setup and Running with Consul Connect
 
 1. **Install Python dependencies:**
    ```bash
@@ -42,16 +42,16 @@ service_b.py            # Service B Flask app
    # Ensure the config enables HTTPS (port 8501) and uses the generated certs in ./certs
    ```
 
-4. **Start Service B:**
+4. **Start Service B and its Connect sidecar:** (in a separate terminal)
    ```bash
-   python3 service_b.py
-   # Service B runs on port 5001
+   python3 service_b.py &
+   consul connect proxy -sidecar-for service_b
    ```
 
-5. **Start Service A:**
+5. **Start Service A and its Connect sidecar:** (in another terminal)
    ```bash
-   python3 service_a.py
-   # Service A runs on port 5000
+   python3 service_a.py &
+   consul connect proxy -sidecar-for service_a
    ```
 
 6. **Test Service A main endpoint:**
@@ -66,7 +66,7 @@ service_b.py            # Service B Flask app
    # Output: Hello from service_b!
    ```
 
-8. **Test Service A calling Service B via Consul:**
+8. **Test Service A calling Service B through Connect:**
    ```bash
    curl http://localhost:5000/call-b
    # Output: {"service_b_response": "Hello from service_b!"}
@@ -76,14 +76,13 @@ service_b.py            # Service B Flask app
 
 ## How Service Discovery Works
 - Each service registers itself with Consul on startup using mTLS and the client certificates in `certs/`.
-- Service A queries Consul's catalog to find Service B's address and port.
-- Service A then makes an HTTP request to Service B using the discovered info.
+- Consul Connect sidecar proxies handle service-to-service mTLS automatically.
+- Service A sends requests for Service B to its local sidecar proxy, which forwards them through the mesh.
 
 ---
 
 ## Notes
-- This setup is for local development and demonstration only.
-- For production, use Consul Connect with sidecar proxies for secure mTLS communication.
+- This setup is for local development and demonstration only and uses Consul Connect with sidecar proxies to secure traffic with mTLS.
 - The Flask development server is not suitable for production workloads.
 
 ---

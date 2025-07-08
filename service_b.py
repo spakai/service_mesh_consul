@@ -23,6 +23,9 @@ def register_service():
     payload = {
         "Name": SERVICE_NAME,
         "Port": SERVICE_PORT,
+        "Connect": {
+            "SidecarService": {}
+        },
         "Check": {
             "HTTP": f"http://localhost:{SERVICE_PORT}/hello",
             "Interval": "10s"
