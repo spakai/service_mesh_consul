@@ -6,6 +6,7 @@ CONSUL_HOST = os.environ.get("CONSUL_HOST", "localhost")
 CONSUL_PORT = os.environ.get("CONSUL_PORT", "8501")  # HTTPS port
 SERVICE_NAME = "service_a"
 SERVICE_PORT = 5000
+UPSTREAM_PORT = 6000
 
 CERT_DIR = "./certs"
 CLIENT_CERT = os.path.join(CERT_DIR, "dc1-client-consul-0.pem")
@@ -20,27 +21,9 @@ def index():
 
 @app.route("/call-b")
 def call_b():
-    # Query Consul for service_b
-    consul_url = f"https://{CONSUL_HOST}:{CONSUL_PORT}/v1/catalog/service/service_b"
+    """Call Service B through the local Connect proxy."""
+    url = f"http://localhost:{UPSTREAM_PORT}/hello"
     try:
-        resp = requests.get(
-            consul_url,
-            cert=(CLIENT_CERT, CLIENT_KEY),
-            verify=CA_CERT
-        )
-        if resp.status_code != 200:
-            return jsonify({"error": f"Failed to query Consul: {resp.status_code} {resp.text}"}), 500
-        services = resp.json()
-        if not services:
-            return jsonify({"error": "service_b not found in Consul"}), 404
-        # Use the first available service_b instance
-        service_b_info = services[0]
-        address = service_b_info.get("ServiceAddress") or service_b_info.get("Address")
-        port = service_b_info.get("ServicePort")
-        if not address or not port:
-            return jsonify({"error": "service_b address/port not found"}), 500
-        # Call service_b's /hello endpoint
-        url = f"http://{address}:{port}/hello"
         b_resp = requests.get(url)
         return jsonify({"service_b_response": b_resp.text})
     except Exception as e:
@@ -51,6 +34,18 @@ def register_service():
     payload = {
         "Name": SERVICE_NAME,
         "Port": SERVICE_PORT,
+        "Connect": {
+            "SidecarService": {
+                "Proxy": {
+                    "Upstreams": [
+                        {
+                            "DestinationName": "service_b",
+                            "LocalBindPort": UPSTREAM_PORT
+                        }
+                    ]
+                }
+            }
+        },
         "Check": {
             "HTTP": f"http://localhost:{SERVICE_PORT}/",
             "Interval": "10s"
