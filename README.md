@@ -83,7 +83,7 @@ service_b.py            # Service B Flask app
 
 ## Notes
 - This setup is for local development and demonstration only.
-- For production, use Consul Connect with sidecar proxies for secure mTLS communication.
+- For production, use Consul Connect with sidecar proxies for secure mTLS communication. Check out branch convert-project-to-use-consul-connect in this repo for an example
 - The Flask development server is not suitable for production workloads.
 
 ---
