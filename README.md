@@ -43,9 +43,9 @@ service_b.py              # Service B Flask app
    # This configures Consul to use HTTPS (port 8501) only, with mTLS required for all clients.
    ```
 
-4. **Start Service B and its Connect sidecar:** (in a separate terminal)
+4. **Start Service B and its Connect sidecar:** (each in a separate terminal)
    ```bash
-   python3 service_b.py &
+   python3 service_b.py 
    consul connect proxy -sidecar-for service_b \
      -http-addr=https://127.0.0.1:8501 \
      -ca-file=certs/consul-agent-ca.pem \
@@ -53,9 +53,9 @@ service_b.py              # Service B Flask app
      -client-key=certs/dc1-client-consul-0-key.pem
    ```
 
-5. **Start Service A and its Connect sidecar:** (in another terminal)
+5. **Start Service A and its Connect sidecar:** ( each in another terminal)
    ```bash
-   python3 service_a.py &
+   python3 service_a.py 
    consul connect proxy -sidecar-for service_a \
      -http-addr=https://127.0.0.1:8501 \
      -ca-file=certs/consul-agent-ca.pem \
