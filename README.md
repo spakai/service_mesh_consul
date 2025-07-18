@@ -127,6 +127,94 @@ Consul Intentions control which services can communicate with each other in the 
 
 ---
 
+## Traffic Splitting with Consul Connect
+
+This project supports advanced traffic management using Consul's service-splitter and service-resolver features. You can split traffic between multiple versions of a service (e.g., for canary deployments or A/B testing).
+
+### Running Multiple Versions of Service B
+
+You can run two versions of Service B simultaneously:
+
+- **service_b v1:**
+  - Port: 5001
+  - Tag: v1
+  - Service ID: service_b-v1
+  - File: `service_b.py`
+- **service_b v2:**
+  - Port: 5002
+  - Tag: v2
+  - Service ID: service_b-v2
+  - File: `service_b_v2.py`
+
+#### 1. Start Service B v1 and its sidecar (in one terminal each):
+```bash
+python3 service_b.py
+consul connect proxy -sidecar-for service_b-v1 \
+  -http-addr=https://127.0.0.1:8501 \
+  -ca-file=certs/consul-agent-ca.pem \
+  -client-cert=certs/dc1-client-consul-0.pem \
+  -client-key=certs/dc1-client-consul-0-key.pem
+```
+
+#### 2. Start Service B v2 and its sidecar (in one terminal each):
+```bash
+python3 service_b_v2.py
+consul connect proxy -sidecar-for service_b-v2 \
+  -http-addr=https://127.0.0.1:8501 \
+  -ca-file=certs/consul-agent-ca.pem \
+  -client-cert=certs/dc1-client-consul-0.pem \
+  -client-key=certs/dc1-client-consul-0-key.pem
+```
+
+> **Note:** Both versions register as `service_b` but with unique service IDs (`service_b-v1` and `service_b-v2`) and different tags (`v1` and `v2`).
+
+### Configuring Traffic Splitting
+
+1. **Create a service-resolver config file (`service-resolver.hcl`):**
+   ```hcl
+   Kind = "service-resolver"
+   Name = "service_b"
+   Subsets = {
+     "v1" = { Filter = "Service.Tags contains \"v1\"" }
+     "v2" = { Filter = "Service.Tags contains \"v2\"" }
+   }
+   ```
+
+2. **Create a service-splitter config file (`service-splitter.hcl`):**
+   ```hcl
+   Kind = "service-splitter"
+   Name = "service_b"
+   Splits = [
+     { Weight = 80, ServiceSubset = "v1" },
+     { Weight = 20, ServiceSubset = "v2" }
+   ]
+   ```
+
+3. **Apply the configs to Consul:**
+   ```bash
+   consul config write -http-addr=https://127.0.0.1:8501 \
+     -ca-file=certs/consul-agent-ca.pem \
+     -client-cert=certs/dc1-client-consul-0.pem \
+     -client-key=certs/dc1-client-consul-0-key.pem \
+     service-resolver.hcl
+   consul config write -http-addr=https://127.0.0.1:8501 \
+     -ca-file=certs/consul-agent-ca.pem \
+     -client-cert=certs/dc1-client-consul-0.pem \
+     -client-key=certs/dc1-client-consul-0-key.pem \
+     service-splitter.hcl
+   ```
+
+### Testing the Traffic Split
+
+- Call Service B through Service A multiple times:
+  ```bash
+  curl http://localhost:5000/call-b
+  # Output will alternate between v1 and v2 responses based on the split
+  ```
+- You should see most responses from v1, and some from v2 (according to the weights).
+
+---
+
 ## How Service Discovery Works
 - Each service registers itself with Consul on startup using mTLS and the client certificates in `certs/`.
 - Consul Connect sidecar proxies handle service-to-service mTLS automatically.
@@ -150,3 +238,62 @@ Consul Intentions control which services can communicate with each other in the 
 
 ## License
 MIT 
+
+---
+
+## **Why This Happens**
+
+- By default, Consul assumes a service uses the `tcp` protocol unless you explicitly specify otherwise.
+- The service-splitter (and advanced L7 routing) only works for services registered as `protocol = "http"` or `protocol = "http2"`.
+
+---
+
+## **How to Fix**
+
+You need to tell Consul that `service_b` uses the HTTP protocol by creating a **service-defaults** config entry.
+
+### 1. **Create a service-defaults.hcl file:**
+```hcl
+Kind = "service-defaults"
+Name = "service_b"
+Protocol = "http"
+```
+
+### 2. **Apply it to Consul:**
+```bash
+consul config write -http-addr=https://127.0.0.1:8501 \
+  -ca-file=certs/consul-agent-ca.pem \
+  -client-cert=certs/dc1-client-consul-0.pem \
+  -client-key=certs/dc1-client-consul-0-key.pem \
+  service-defaults.hcl
+```
+
+### 3. **Then re-apply your splitter and resolver configs:**
+```bash
+consul config write -http-addr=https://127.0.0.1:8501 \
+  -ca-file=certs/consul-agent-ca.pem \
+  -client-cert=certs/dc1-client-consul-0.pem \
+  -client-key=certs/dc1-client-consul-0-key.pem \
+  service-resolver.hcl
+
+consul config write -http-addr=https://127.0.0.1:8501 \
+  -ca-file=certs/consul-agent-ca.pem \
+  -client-cert=certs/dc1-client-consul-0.pem \
+  -client-key=certs/dc1-client-consul-0-key.pem \
+  service-splitter.hcl
+```
+
+---
+
+## **Summary Table**
+
+| Config File           | Purpose                        |
+|-----------------------|--------------------------------|
+| service-defaults.hcl  | Set protocol to HTTP           |
+| service-resolver.hcl  | Define v1/v2 subsets           |
+| service-splitter.hcl  | Split traffic between subsets  |
+
+---
+
+**Once you set the protocol to HTTP, Consul will allow advanced routing and splitting!**
+

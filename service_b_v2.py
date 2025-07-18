@@ -5,7 +5,7 @@ from flask import Flask
 CONSUL_HOST = os.environ.get("CONSUL_HOST", "localhost")
 CONSUL_PORT = os.environ.get("CONSUL_PORT", "8501")  # HTTPS port
 SERVICE_NAME = "service_b"
-SERVICE_PORT = 5001
+SERVICE_PORT = 5002  # Different port for v2
 
 CERT_DIR = "./certs"
 CLIENT_CERT = os.path.join(CERT_DIR, "dc1-client-consul-0.pem")
@@ -16,15 +16,15 @@ app = Flask(__name__)
 
 @app.route("/hello")
 def hello():
-    return "Hello from service_b!"
+    return "Hello from service_b v2!"
 
 def register_service():
     url = f"https://{CONSUL_HOST}:{CONSUL_PORT}/v1/agent/service/register"
     payload = {
         "Name": SERVICE_NAME,
-        "ID": "service_b-v1",  # Unique service ID for v1
+        "ID": "service_b-v2",  # Unique service ID for v2
         "Port": SERVICE_PORT,
-        "Tags": ["v1"],
+        "Tags": ["v2"],  # Tag as v2
         "Connect": {
             "SidecarService": {}
         },
@@ -41,9 +41,9 @@ def register_service():
             verify=CA_CERT
         )
         if response.status_code == 200:
-            print(f"✅ Registered {SERVICE_NAME} v1 with Consul!")
+            print(f"✅ Registered {SERVICE_NAME} v2 with Consul!")
         else:
-            print(f"❌ Failed to register service v1: {response.status_code} {response.text}")
+            print(f"❌ Failed to register service v2: {response.status_code} {response.text}")
     except Exception as e:
         print(f"❌ Exception during registration: {e}")
 
