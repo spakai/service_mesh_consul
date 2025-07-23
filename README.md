@@ -297,3 +297,150 @@ consul config write -http-addr=https://127.0.0.1:8501 \
 
 **Once you set the protocol to HTTP, Consul will allow advanced routing and splitting!**
 
+---
+
+## **Step 1: Create a service-router.hcl File**
+
+This file will tell Consul (and Envoy) to:
+- Retry failed requests to `service_b` up to 3 times.
+- Set a request timeout of 2 seconds.
+
+```hcl
+Kind = "service-router"
+Name = "service_b"
+Routes = [
+  {
+    Match {
+      HTTP {
+        PathPrefix = "/"
+      }
+    }
+    Destination {
+      Service = "service_b"
+      RequestTimeout = "2s"   # Timeout for requests
+      NumRetries = 3          # Number of retries
+    }
+  }
+]
+```
+
+---
+
+## **Step 2: Apply the Router Config to Consul**
+
+```bash
+consul config write -http-addr=https://127.0.0.1:8501 \
+  -ca-file=certs/consul-agent-ca.pem \
+  -client-cert=certs/dc1-client-consul-0.pem \
+  -client-key=certs/dc1-client-consul-0-key.pem \
+  service-router.hcl
+```
+
+---
+
+## **Step 3: Test the Behavior**
+
+1. **Simulate a slow or failing service_b:**
+   - You can temporarily add a `time.sleep(3)` in your `/hello` endpoint in `service_b.py` or `service_b_v2.py` to simulate a slow response.
+2. **Call Service A’s `/call-b` endpoint:**
+   ```bash
+   curl -v http://localhost:5000/call-b
+   ```
+   - You should see that the request times out after 2 seconds (instead of hanging for 3+ seconds).
+   - If you simulate failures (e.g., by stopping one `service_b` instance), you’ll see retries in the logs.
+
+---
+
+## **Step 4: Observe in Logs**
+
+- The Envoy sidecar logs for `service_a` will show retry attempts and timeouts.
+- You can also see the effect by watching how quickly errors are returned to the client.
+
+---
+
+## **Step 5: Clean Up**
+
+- Remove or comment out the artificial delay in your service after testing.
+
+---
+
+## **Summary Table**
+
+| Setting         | Effect                                 |
+|-----------------|----------------------------------------|
+| `RequestTimeout`| Max time to wait for a response        |
+| `NumRetries`    | Number of retry attempts on failure    |
+
+---
+
+Would you like me to create the `service-router.hcl` file for you, or do you want to try it yourself?  
+Let me know if you want to go deeper (e.g., circuit breakers, rate limiting) after this!
+
+### Key Points:
+- **Consul version:** v1.21.2 (very recent, so features are supported)
+- **Envoy:** `envoy: command not found`
+
+---
+
+## **What This Means**
+
+- **You do not have Envoy installed on your system.**
+- The Consul Connect default proxy is Envoy. If you run `consul connect proxy -sidecar-for ...` without Envoy installed, Consul will attempt to use its built-in proxy (which is very limited and does NOT support L7 features like retries, timeouts, or traffic splitting).  
+- **All advanced L7 features (timeouts, retries, splitting, etc.) require Envoy.**
+
+---
+
+## **How to Fix**
+
+### 1. **Install Envoy**
+
+Follow the official instructions for your OS:  
+[Envoy Installation Guide](https://www.envoyproxy.io/docs/envoy/latest/start/install)
+
+For Ubuntu, you can use:
+```bash
+<code_block_to_apply_changes_from>
+sudo apt update
+sudo apt install -y apt-transport-https gnupg2 curl lsb-release
+curl -sL 'https://getenvoy.io/gpg' | sudo apt-key add -
+sudo add-apt-repository \
+    "deb [arch=amd64] https://dl.bintray.com/tetrate/getenvoy-deb $(lsb_release -cs) stable"
+sudo apt update
+sudo apt install -y getenvoy-envoy
+```
+Or, for the latest version, see the [Envoy docs](https://www.envoyproxy.io/docs/envoy/latest/start/install).
+
+### 2. **Verify Installation**
+```bash
+envoy --version
+```
+You should see the version output.
+
+### 3. **Restart All Sidecar Proxies**
+After installing Envoy, restart all your sidecar proxies:
+```bash
+consul connect proxy -sidecar-for service_a ...
+consul connect proxy -sidecar-for service_b-v1 ...
+consul connect proxy -sidecar-for service_b-v2 ...
+```
+(You may need to kill the old proxy processes first.)
+
+### 4. **Test Again**
+Now, your L7 features (timeouts, retries, splitting) will work as expected!
+
+---
+
+## **Summary Table**
+
+| Requirement         | Status         |
+|---------------------|---------------|
+| Consul version      | OK            |
+| Envoy installed     | **Missing**   |
+| L7 features work?   | **No**        |
+
+---
+
+**Once Envoy is installed and used as the proxy, your timeouts, retries, and traffic splitting will work!**
+
+Let me know if you need help with the Envoy installation or want a script to automate the process.
+
